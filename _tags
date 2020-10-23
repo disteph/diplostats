@@ -1,0 +1,24 @@
+true: annot, bin_annot
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+
+true: debug, optimize(3), unbox_closures
+
+<src/*> :       package(sexplib),\
+                package(sexplib0),\
+                package(containers),\
+                package(str),\
+                package(ppx_deriving.std),\
+                package(cohttp-lwt-unix),\
+                package(lwt),\
+                package(uutf),\
+                package(lambdasoup),\
+                thread
