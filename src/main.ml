@@ -10,12 +10,20 @@ let rule_messaging = ref false
 let pub_messaging = ref false
 let finished = ref false
 
+let vdiplo   = ref true
+let webdiplo = ref true
+
 let bogus_games = ["Caucasia - Random" ]
 
 let print i fs = Format.((if !verbosity >= i then fprintf else ifprintf) stderr) fs
-               
-let url variant page = 
-  let base = "https://vdiplomacy.com/gamelistings.php?" in
+
+type base = VDiplo | WebDiplo [@@deriving show]
+
+let url base variant page = 
+  let base = match base with
+    | VDiplo -> "https://vdiplomacy.com/gamelistings.php?"
+    | WebDiplo -> "https://webdiplomacy.net/gamelistings.php?"
+  in
   let options = [
       "gamelistType", Some "Search";
       "status", Some (if !finished then "Finished" else "Won");
@@ -54,8 +62,8 @@ let url variant page =
   in
   base^(options |> aux1 |> aux2)
                
-let get variant page =
-  let url = url variant page in
+let get base variant page =
+  let url = url base variant page in
   let open Lwt in
   Client.get (Uri.of_string url) >>= fun (resp, body) ->
   (* let code = resp |> Response.status |> Code.code_of_status in
@@ -159,15 +167,16 @@ let compute_ranking last_record index result =
 let parse ?older variant =
   print 0 "@[<v>@[<v>";
   let open Soup in
-  let rec collect page games =
-    print 0 "@[Collecting page %i@]%!@ " page;
-    let parsed = Lwt_main.run (get variant page) |> parse in
+  let rec collect base page games =
+    print 0 "@[Collecting page %i from %a@]%!@ " page pp_base base;
+    let parsed = Lwt_main.run (get base variant page) |> parse in
     match parsed $$ ".gamePanel" |> to_list with
     | [] -> games
-    | page_games -> collect (page+1) (List.rev_append page_games games)
+    | page_games -> collect base (page+1) (List.rev_append page_games games)
   in
   print 0 "@]@,@[<v>";
-  let games = collect 1 [] |> List.rev in
+  let webgames = if !webdiplo then collect WebDiplo 1 [] else [] in
+  let vgames   = if !vdiplo   then collect VDiplo 1 [] else [] in
   let tbl = HT.create 10 in
   let per_country (i,d,l) member =
     match get_name member with
@@ -183,34 +192,36 @@ let parse ?older variant =
        i+1, d, (record::l)
     | None -> i, d, l
   in
-  let per_game (older,nb) game =
-    match older with
-    | Some g ->
-       (if String.equal (game_name game) g then None else older), nb
-    | None ->
-       if List.mem (game_name game) bogus_games then (None, nb)
-       else
-         let _, _, results = game $$ ".member" |> to_list |> List.fold_left per_country (1,1,[]) in
-         let results = List.sort (Ord.opp compare_result) results in
-         let last_record, results = List.fold_map_i compute_ranking None results in
-         (match last_record with
-          | Some r -> close_ranking r.ranking (List.length results + 1);
-          | None -> assert false);
-         print 1 "@[<v>%a@,@]@," (List.pp pp_record) results;
-         let fill_up record =
-           let result = record.result in
-           let base = if HT.mem tbl result.country then HT.find tbl result.country else [] in
-           HT.replace tbl result.country (record::base)
-         in
-         List.iter fill_up results;
-         None, nb+1
+  let per_game older ((stop,nb) as sofar) game =
+    if stop then sofar
+    else
+      match older with
+      | Some g when String.equal (game_name game) g -> true, nb
+      | _ ->
+         if List.mem (game_name game) bogus_games then (false, nb)
+         else
+           let _, _, results = game $$ ".member" |> to_list |> List.fold_left per_country (1,1,[]) in
+           let results = List.sort (Ord.opp compare_result) results in
+           let last_record, results = List.fold_map_i compute_ranking None results in
+           (match last_record with
+            | Some r -> close_ranking r.ranking (List.length results + 1);
+            | None -> assert false);
+           print 1 "@[<v>%a@,@]@," (List.pp pp_record) results;
+           let fill_up record =
+             let result = record.result in
+             let base = if HT.mem tbl result.country then HT.find tbl result.country else [] in
+             HT.replace tbl result.country (record::base)
+           in
+           List.iter fill_up results;
+           false, nb+1
   in
-  let _, nb_games = List.fold_left per_game (older,0) games in
+  let sofar = List.fold_left (per_game older) (false,0) webgames in
+  let _, nb_games = List.fold_left (per_game older) sofar vgames in
   let upto = match older with
     | Some g -> " before game "^g
     | None -> ""
   in
-  print_endline (variant^"; "^string_of_int nb_games ^"; games played"^ upto ^"; "^ url variant 1);
+  print_endline (variant^"; "^string_of_int nb_games ^"; games played"^ upto ^"; "^ url VDiplo variant 1);
   print_endline "Rémi; Country ; Average ranking; Victories; Average centers; Average units";
   let total = ref 0. in
   let aux country l =
@@ -237,6 +248,8 @@ let options = [
   ("-rule_messaging", Arg.Set rule_messaging, "Look at games with rulebook messaging");
   ("-pub_messaging", Arg.Set pub_messaging, "Look at games with rulebook messaging");
   ("-no-anonymity", Arg.Clear anonymity, "Look at games without anonymity (default is look at games with anonymity)");
+  ("-novdiplo", Arg.Clear vdiplo, "Do not look at games on vdiplomacy.com");
+  ("-nowebdiplo", Arg.Clear webdiplo, "Do not look at games on webdiplomacy.net");
 ];;
 
 Arg.parse options (fun a->args := a::!args) description;;
