@@ -16,7 +16,8 @@ let webdiplo = ref true
 let bogus_games = ["Caucasia - Random" ]
 
 let print i fs = Format.((if !verbosity >= i then fprintf else ifprintf) stderr) fs
-
+let print_stdout s = Format.(fprintf stdout "%s@," s)
+             
 type base = VDiplo | WebDiplo [@@deriving show]
 
 let url base variant page = 
@@ -118,7 +119,8 @@ let compare_result { centers_units = cu1 } { centers_units = cu2 } =
   | Survived(c1,u1), Survived(c2,u2) -> Ord.pair Int.compare Int.compare (c1,u1) (c2,u2)
   | Survived _, Defeated _ -> 1
   | Defeated _, Survived _ -> -1
-  | Defeated d1, Defeated d2 -> Ord.opp Int.compare d1 d2
+  | Defeated d1, Defeated d2 -> 0
+  (* | Defeated d1, Defeated d2 -> Ord.opp Int.compare d1 d2 *)
 
 module HT = Hashtbl.Make(String)
 
@@ -126,10 +128,8 @@ let (/) n d = float_of_int n /. float_of_int d
 
 let game_name game =
   let open Soup in
-  let r = game $ ".gameName" |> R.leaf_text in
-  print 0 "@[%s@]@," r;
-  r
-  
+  game $ ".gameName" |> R.leaf_text
+
 let compute_stats l =
   let rec aux i rankings victories centers units = function
     | [] -> rankings /. float_of_int i, victories / i, centers / i, units / i
@@ -137,7 +137,7 @@ let compute_stats l =
        let victories = if victorious then victories + 1 else victories in
        aux (i+1) (rankings +. !ranking) victories (centers + c) (units + u) l
     | { ranking; result = { centers_units = Defeated r }}::l ->
-       aux (i+1) (rankings +. !ranking) victories (centers - r) (units - r) l
+       aux (i+1) (rankings +. !ranking) victories centers units l
   in
   aux 0 0. 0 0 0 l
 
@@ -165,16 +165,16 @@ let compute_ranking last_record index result =
        end
     
 let parse ?older variant =
-  print 0 "@[<v>@[<v>";
+  Format.(fprintf stdout "@[<v>");
   let open Soup in
   let rec collect base page games =
-    print 0 "@[Collecting page %i from %a@]%!@ " page pp_base base;
+    print 0 "@[Collecting page %i from %a@]@,%!" page pp_base base;
     let parsed = Lwt_main.run (get base variant page) |> parse in
     match parsed $$ ".gamePanel" |> to_list with
     | [] -> games
     | page_games -> collect base (page+1) (List.rev_append page_games games)
   in
-  print 0 "@]@,@[<v>";
+  print 0 "\n%!";
   let webgames = if !webdiplo then collect WebDiplo 1 [] else [] in
   let vgames   = if !vdiplo   then collect VDiplo 1 [] else [] in
   let tbl = HT.create 10 in
@@ -188,32 +188,36 @@ let parse ?older variant =
        in
        let record = { country; centers_units }
        in
-       (* print_endline (show_result record); *)
+       (* print_stdout (show_result record); *)
        i+1, d, (record::l)
     | None -> i, d, l
   in
   let per_game older ((stop,nb) as sofar) game =
     if stop then sofar
     else
-      match older with
-      | Some g when String.equal (game_name game) g -> true, nb
-      | _ ->
-         if List.mem (game_name game) bogus_games then (false, nb)
-         else
-           let _, _, results = game $$ ".member" |> to_list |> List.fold_left per_country (1,1,[]) in
-           let results = List.sort (Ord.opp compare_result) results in
-           let last_record, results = List.fold_map_i compute_ranking None results in
-           (match last_record with
-            | Some r -> close_ranking r.ranking (List.length results + 1);
-            | None -> assert false);
-           print 1 "@[<v>%a@,@]@," (List.pp pp_record) results;
-           let fill_up record =
-             let result = record.result in
-             let base = if HT.mem tbl result.country then HT.find tbl result.country else [] in
-             HT.replace tbl result.country (record::base)
-           in
-           List.iter fill_up results;
-           false, nb+1
+      let name = game_name game in
+      begin
+        print 0 "@[%s@]@,%!" name;
+        match older with
+        | Some g when String.equal name g -> true, nb
+        | _ ->
+           if List.mem name bogus_games then (false, nb)
+           else
+             let _, _, results = game $$ ".member" |> to_list |> List.fold_left per_country (1,1,[]) in
+             let results = List.sort (Ord.opp compare_result) results in
+             let last_record, results = List.fold_map_i compute_ranking None results in
+             (match last_record with
+              | Some r -> close_ranking r.ranking (List.length results + 1);
+              | None -> assert false);
+             print 1 "@[<v>%a@,@]@,%!" (List.pp pp_record) results;
+             let fill_up record =
+               let result = record.result in
+               let base = if HT.mem tbl result.country then HT.find tbl result.country else [] in
+               HT.replace tbl result.country (record::base)
+             in
+             List.iter fill_up results;
+             false, nb+1
+      end
   in
   let sofar = List.fold_left (per_game older) (false,0) webgames in
   let _, nb_games = List.fold_left (per_game older) sofar vgames in
@@ -221,21 +225,21 @@ let parse ?older variant =
     | Some g -> " before game "^g
     | None -> ""
   in
-  print_endline (variant^"; "^string_of_int nb_games ^"; games played"^ upto ^"; "^ url VDiplo variant 1);
-  print_endline "Rémi; Country ; Average ranking; Victories; Average centers; Average units";
+  print_stdout (variant^"; "^string_of_int nb_games ^"; games played"^ upto ^"; "^ url VDiplo variant 1);
+  print_stdout "Rémi; Country ; Average ranking; Victories; Average centers; Average units";
   let total = ref 0. in
   let aux country l =
     let ranking, victories, centers, units = compute_stats l in
     total := ranking +. !total;
-    print_endline ("; "^ country
+    print_stdout ("; "^ country
                    ^"; "^ string_of_float ranking
                    ^"; "^ string_of_float victories
                    ^"; "^ string_of_float centers
                    ^"; "^ string_of_float units)
   in
   HT.iter aux tbl;
-  print 1 "@[<v>%f@,@]@," !total;
-  print 0 "@]@]%!"
+  print 1 "@[<v>%f@,@]@,%!" !total;
+  Format.(fprintf stdout "@]%!")
 
 let args = ref []
 let description = "QE in Yices"
