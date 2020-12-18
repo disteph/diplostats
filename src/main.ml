@@ -116,7 +116,8 @@ type record = {
 
 let compare_result { centers_units = cu1 } { centers_units = cu2 } =
   match cu1, cu2 with
-  | Survived(c1,u1), Survived(c2,u2) -> Ord.pair Int.compare Int.compare (c1,u1) (c2,u2)
+  (* | Survived(c1,u1), Survived(c2,u2) -> Ord.pair Int.compare Int.compare (c1,u1) (c2,u2) *)
+  | Survived(c1,_), Survived(c2,_) -> Int.compare c1 c2
   | Survived _, Defeated _ -> 1
   | Defeated _, Survived _ -> -1
   | Defeated d1, Defeated d2 -> 0
