@@ -111,7 +111,7 @@ type result = {
 type record = {
     result : result;
     ranking : float ref [@printer fun fmt r -> fprintf fmt "%f" !r];
-    victorious : bool
+    victorious : float ref [@printer fun fmt r -> fprintf fmt "%f" !r];
   } [@@deriving show { with_path = false }]
 
 let compare_result { centers_units = cu1 } { centers_units = cu2 } =
@@ -133,14 +133,14 @@ let game_name game =
 
 let compute_stats l =
   let rec aux i rankings victories centers units = function
-    | [] -> rankings /. float_of_int i, victories / i, centers / i, units / i
+    | [] -> rankings /. float_of_int i, victories /. float_of_int  i, centers / i, units / i
     | { ranking; result = { centers_units = Survived(c,u) }; victorious }::l ->
-       let victories = if victorious then victories + 1 else victories in
+       let victories = victories +. !victorious in
        aux (i+1) (rankings +. !ranking) victories (centers + c) (units + u) l
     | { ranking; result = { centers_units = Defeated r }}::l ->
        aux (i+1) (rankings +. !ranking) victories centers units l
   in
-  aux 0 0. 0 0 0 l
+  aux 0 0. 0. 0 0 l
 
 let close_ranking last_ranking index =
   let nb = float_of_int index -. !last_ranking in
@@ -152,7 +152,8 @@ let compute_ranking last_record index result =
   let index = index+1 in
   match last_record with
   | None -> let ranking = ref 1. in
-            let record = { ranking; victorious = true; result } in
+            let victorious = ref 1. in
+            let record = { ranking; victorious; result } in
             (Some record), record
   | Some r ->
      if compare_result r.result result = 0
@@ -160,8 +161,10 @@ let compute_ranking last_record index result =
      else
        begin
          close_ranking r.ranking index;
+         r.victorious := !(r.victorious) /. float_of_int (index - 1);
          let ranking = ref (float_of_int index) in
-         let record = { ranking; victorious = false; result } in
+         let victorious = ref 0. in
+         let record = { ranking; victorious; result } in
          (Some record), record
        end
     
@@ -208,7 +211,9 @@ let parse ?older variant =
              let results = List.sort (Ord.opp compare_result) results in
              let last_record, results = List.fold_map_i compute_ranking None results in
              (match last_record with
-              | Some r -> close_ranking r.ranking (List.length results + 1);
+              | Some r ->
+                 close_ranking r.ranking (List.length results + 1);
+                 r.victorious := !(r.victorious) /. float_of_int (List.length results)
               | None -> assert false);
              print 1 "@[<v>%a@,@]@,%!" (List.pp pp_record) results;
              let fill_up record =
