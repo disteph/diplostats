@@ -1,0 +1,8 @@
+(library
+ (name diplostats)
+ (libraries containers str lwt cohttp cohttp-lwt cohttp-lwt-unix lambdasoup)
+ (preprocess (pps ppx_deriving.std))
+ (synopsis "DiploStats library")
+)
+
+(env (dev (flags (:standard -warn-error -A))))
