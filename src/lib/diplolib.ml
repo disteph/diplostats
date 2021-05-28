@@ -16,7 +16,7 @@ let webdiplo = ref true
 let bogus_games = ["Caucasia - Random" ]
 
 let print i fs = Format.((if !verbosity >= i then fprintf else ifprintf) stderr) fs
-let print_stdout s = Format.(fprintf stdout "%s@," s)
+(* let print_stdout s = Format.(fprintf stdout "%s@," s) *)
              
 type base = VDiplo | WebDiplo [@@deriving show]
 
@@ -168,19 +168,20 @@ let compute_ranking last_record index result =
          (Some record), record
        end
     
-let parse ?older variant =
+let parse ?(html=true) ?older variant =
   Format.(fprintf stdout "@[<v>");
-  let open Soup in
+  let (let*) = Lwt.bind in
   let rec collect base page games =
     print 0 "@[Collecting page %i from %a@]@,%!" page pp_base base;
-    let parsed = Lwt_main.run (get base variant page) |> parse in
-    match parsed $$ ".gamePanel" |> to_list with
-    | [] -> games
-    | page_games -> collect base (page+1) (List.rev_append page_games games)
+    let* p = get base variant page in
+    let parsed = Soup.parse p in
+    match Soup.(parsed $$ ".gamePanel" |> to_list) with
+    | [] -> Lwt.return games
+    | page_games -> collect base (page+1) Soup.(List.rev_append page_games games)
   in
   print 0 "\n%!";
-  let webgames = if !webdiplo then collect WebDiplo 1 [] else [] in
-  let vgames   = if !vdiplo   then collect VDiplo 1 [] else [] in
+  let* webgames = if !webdiplo then collect WebDiplo 1 [] else Lwt.return [] in
+  let* vgames   = if !vdiplo   then collect VDiplo 1 [] else Lwt.return [] in
   let tbl = HT.create 10 in
   let per_country (i,d,l) member =
     match get_name member with
@@ -207,7 +208,7 @@ let parse ?older variant =
         | _ ->
            if List.mem name bogus_games then (false, nb)
            else
-             let _, _, results = game $$ ".member" |> to_list |> List.fold_left per_country (1,1,[]) in
+             let _, _, results = Soup.(game $$ ".member" |> to_list) |> List.fold_left per_country (1,1,[]) in
              let results = List.sort (Ord.opp compare_result) results in
              let last_record, results = List.fold_map_i compute_ranking None results in
              (match last_record with
@@ -231,18 +232,50 @@ let parse ?older variant =
     | Some g -> " before game "^g
     | None -> ""
   in
-  print_stdout (variant^"; "^string_of_int nb_games ^"; games played"^ upto ^"; "^ url VDiplo variant 1);
-  print_stdout "Rémi; Country ; Average ranking; Victories; Average centers; Average units";
-  let total = ref 0. in
-  let aux country l =
-    let ranking, victories, centers, units = compute_stats l in
-    total := ranking +. !total;
-    print_stdout ("; "^ country
-                   ^"; "^ string_of_float ranking
-                   ^"; "^ string_of_float victories
-                   ^"; "^ string_of_float centers
-                   ^"; "^ string_of_float units)
+  let wrap_cell arg fmt =
+    if html then Format.fprintf fmt "<td>%t</td>" arg
+    else Format.fprintf fmt "%t;" arg
   in
-  HT.iter aux tbl;
-  print 1 "@[<v>%f@,@]@,%!" !total;
-  Format.sprintf "@]%!"
+  let wrap_line arg fmt =
+    if html then Format.fprintf fmt "<tr>%t</tr>@," arg
+    else Format.fprintf fmt "%t@," arg
+  in
+  let string fmt s = wrap_cell(fun fmt -> Format.fprintf fmt "%s" s) fmt in
+  let int fmt i    = wrap_cell(fun fmt -> Format.fprintf fmt "%i" i) fmt in
+  let float fmt f  = wrap_cell(fun fmt -> Format.fprintf fmt "%f" f) fmt in
+  let pp fmt =
+    wrap_line (fun fmt ->
+        Format.fprintf fmt "%a %a %a %a %a"
+          string variant
+          int nb_games
+          string "games_played"
+          string upto
+          string (url VDiplo variant 1)) fmt;
+    wrap_line (fun fmt ->
+        Format.fprintf fmt "%a %a %a %a %a %a"
+          string "Rémi"
+          string "Country"
+          string "Average ranking"
+          string "Victories"
+          string "Average centers"
+          string "Average units") fmt;
+    let total = ref 0. in
+    let aux country l =
+      let ranking, victories, centers, units = compute_stats l in
+      total := ranking +. !total;
+      wrap_line (fun fmt ->
+          Format.fprintf fmt "%a %a %a %a %a %a"
+            string ""
+            string country
+            float ranking
+            float victories
+            float centers
+            float units) fmt;
+    in
+    HT.iter aux tbl;
+    print 1 "@[<v>%f@,@]@,%!" !total
+  in
+  Lwt.return(
+      if html then Format.sprintf "@[<v><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\" />@,<table>@,%t@,</table>@,@]%!" pp
+      else Format.sprintf "@[<v>%t@]%!" pp
+  ) 

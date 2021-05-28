@@ -56,46 +56,57 @@ class hello = object(self)
 
   method content_types_accepted rd =
     Wm.continue [] rd
-
     
   method private answer rd =
-    let treat key f =
-      let open Wm.Rd in
-      match lookup_path_info key rd with
+    let module SM = Map.Make(String) in
+    let options = match Wm.Rd.lookup_path_info "options" rd with
+      | Some v ->
+         print_endline v;
+         let l = String.split_on_char '&' v in
+         let aux sofar option = match String.split_on_char '=' option with
+           | key::tail -> SM.add key (String.concat "=" tail) sofar 
+           | [] -> sofar
+         in
+         List.fold_left aux SM.empty l
+      | None -> SM.empty
+    in
+    print_endline "Finished constructing options";
+    let treat key f = match SM.get key options with
       | Some v -> f v
       | None -> ()
     in
-    match Wm.Rd.lookup_path_info "variant" rd with
-    | None -> "Variant is missing"
+    match SM.get "variant" options with
+    | None -> Lwt.return "Variant is missing"
     | Some variant ->
-       let () =
-         treat "verb"     (fun v -> verbosity := int_of_string v);
-         treat "finished" (fun v -> finished := bool_of_string v);
-         treat "nono_messaging" (fun v -> no_messaging := not(bool_of_string v));
-         treat "norm_messaging" (fun v -> norm_messaging := bool_of_string v);
-         treat "rule_messaging" (fun v -> rule_messaging := bool_of_string v);
-         treat "pub_messaging"  (fun v -> pub_messaging := bool_of_string v);
-         treat "no-anonymity"   (fun v -> anonymity := not(bool_of_string v));
-         treat "novdiplo"       (fun v -> vdiplo := not(bool_of_string v));
-         treat "nowebdiplo"     (fun v -> webdiplo := not(bool_of_string v))
-       in
-       let older = Wm.Rd.lookup_path_info "older" rd in
+       print_endline("Variant is "^variant);
+       treat "verb"           (fun v -> verbosity := int_of_string v);
+       treat "finished"       (fun v -> finished := bool_of_string v);
+       treat "nono_messaging" (fun v -> no_messaging := not(bool_of_string v));
+       treat "norm_messaging" (fun v -> norm_messaging := bool_of_string v);
+       treat "rule_messaging" (fun v -> rule_messaging := bool_of_string v);
+       treat "pub_messaging"  (fun v -> pub_messaging := bool_of_string v);
+       treat "no-anonymity"   (fun v -> anonymity := not(bool_of_string v));
+       treat "novdiplo"       (fun v -> vdiplo := not(bool_of_string v));
+       treat "nowebdiplo"     (fun v -> webdiplo := not(bool_of_string v));
+       print_endline("Options processed");
+       let older = SM.get "older" options in
        parse ?older variant
-                                                             
+
   (* Returns an html-based representation of the resource *)
   method private to_html rd =
-    let answer = self#answer rd in
+    self#answer rd >>= fun answer ->
     let body = Printf.sprintf "<html><body>%s</body></html>" answer in
     Wm.continue (`String body) rd
 
   (* Returns a plaintext representation of the resource *)
   method private to_text rd =
-    let text = self#answer rd in
+    self#answer rd >>= fun answer ->
+    let text = answer in
     Wm.continue (`String text) rd
 
   (* Returns a json representation of the resource *)
   method private to_json rd =
-    let answer = self#answer rd in
+    self#answer rd >>= fun answer ->
     let json = Printf.sprintf "{\"output\" : \"%s\"}" answer in
     Wm.continue (`String json) rd
 
@@ -109,8 +120,9 @@ let main ~port =
    *   [Wm.Rd.lookup_path_info "what" rd]
   *)
   let routes = [
-    ("/"           , fun () -> new hello);
-  ] in
+    ("/:options", fun () -> new hello);
+    ]
+  in
   let callback (_ch,_conn) request body =
     let open Cohttp in
     (* Perform route dispatch. If [None] is returned, then the URI path did not
@@ -155,7 +167,7 @@ let main ~port =
   in
   let config = Server.make ~callback ~conn_closed () in
   Printf.eprintf "hello_lwt: listening on localhost:%d\n%!" port;
-  Server.create  ~mode:(`TCP(`Port port)) config
+  Server.create ~mode:(`TCP(`Port port)) config
 
 let port = ref 8080
 
