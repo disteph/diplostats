@@ -1,5 +1,0 @@
-PKG ocamlbuild cohttp containers str lwt cohttp-lwt-unix lambdasoup ppx_deriving.std uutf
-S .
-S ./_build/src
-S ./src
-B ./_build/src

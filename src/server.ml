@@ -1,5 +1,4 @@
 open Containers
-open Sexplib
    
 open Lwt.Infix
 open Cohttp_lwt
@@ -64,7 +63,15 @@ class hello = object(self)
          print_endline v;
          let l = String.split_on_char '&' v in
          let aux sofar option = match String.split_on_char '=' option with
-           | key::tail -> SM.add key (String.concat "=" tail) sofar 
+           | key::tail ->
+              let value = String.concat "=" tail in
+              if not(String.is_empty value)
+              then
+                begin
+                  print_endline ("Registering key "^key^" with value "^value);
+                  SM.add key value sofar
+                end
+              else sofar 
            | [] -> sofar
          in
          List.fold_left aux SM.empty l
@@ -72,7 +79,9 @@ class hello = object(self)
     in
     print_endline "Finished constructing options";
     let treat key f = match SM.get key options with
-      | Some v -> f v
+      | Some v ->
+         print_endline ("Setting option "^key^" to "^v);
+         f v
       | None -> ()
     in
     match SM.get "variant" options with
@@ -90,7 +99,9 @@ class hello = object(self)
        treat "nowebdiplo"     (fun v -> webdiplo := not(bool_of_string v));
        print_endline("Options processed");
        let older = SM.get "older" options in
-       parse ?older variant
+       parse ?older variant >>= fun result ->
+       reset();
+       Lwt.return result
 
   (* Returns an html-based representation of the resource *)
   method private to_html rd =
@@ -170,9 +181,6 @@ let main ~port =
   Server.create ~mode:(`TCP(`Port port)) config
 
 let port = ref 8080
-
-let description arg =
-  "This is an ocaml reformulator for "^arg^" represented in JSON. The command takes the port number to listen to as optional argument (8080 is the default)."
 
 let args = ref []
 let description = "Diplostats server"

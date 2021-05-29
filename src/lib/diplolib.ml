@@ -1,5 +1,4 @@
 open Containers
-open Cohttp
 open Cohttp_lwt_unix
 
 let verbosity = ref 0
@@ -13,6 +12,15 @@ let finished = ref false
 let vdiplo   = ref true
 let webdiplo = ref true
 
+let reset () =
+  verbosity := 0;
+  anonymity := true;
+  no_messaging := true;
+  norm_messaging := false;
+  rule_messaging := false;
+  pub_messaging := false;
+  finished := false
+  
 let bogus_games = ["Caucasia - Random" ]
 
 let print i fs = Format.((if !verbosity >= i then fprintf else ifprintf) stderr) fs
@@ -177,7 +185,7 @@ let parse ?(html=true) ?older variant =
     let parsed = Soup.parse p in
     match Soup.(parsed $$ ".gamePanel" |> to_list) with
     | [] -> Lwt.return games
-    | page_games -> collect base (page+1) Soup.(List.rev_append page_games games)
+    | page_games -> collect base (page+1) (List.rev_append page_games games)
   in
   print 0 "\n%!";
   let* webgames = if !webdiplo then collect WebDiplo 1 [] else Lwt.return [] in
