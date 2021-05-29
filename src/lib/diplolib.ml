@@ -237,8 +237,8 @@ let parse ?(html=true) ?older variant =
   let sofar = List.fold_left (per_game older) (false,0) webgames in
   let _, nb_games = List.fold_left (per_game older) sofar vgames in
   let upto = match older with
-    | Some g -> " before game "^g
-    | None -> ""
+    | Some g -> "games played before game "^g
+    | None -> "games played"
   in
   let wrap_cell arg fmt =
     if html then Format.fprintf fmt "<td>%t</td>" arg
@@ -252,13 +252,6 @@ let parse ?(html=true) ?older variant =
   let int fmt i    = wrap_cell(fun fmt -> Format.fprintf fmt "%i" i) fmt in
   let float fmt f  = wrap_cell(fun fmt -> Format.fprintf fmt "%f" f) fmt in
   let pp fmt =
-    wrap_line (fun fmt ->
-        Format.fprintf fmt "%a %a %a %a %a"
-          string variant
-          int nb_games
-          string "games_played"
-          string upto
-          string (url VDiplo variant 1)) fmt;
     wrap_line (fun fmt ->
         Format.fprintf fmt "%a %a %a %a %a %a"
           string "Rémi"
@@ -281,9 +274,23 @@ let parse ?(html=true) ?older variant =
             float units) fmt;
     in
     HT.iter aux tbl;
+    wrap_line (fun fmt ->
+        Format.fprintf fmt "%a %a %a %a %a %a %a %a %a %a"
+          string ""
+          string ""
+          string ""
+          string ""
+          string ""
+          string ""
+          string variant
+          int nb_games
+          string upto
+          string (url VDiplo variant 1)) fmt;
     print 1 "@[<v>%f@,@]@,%!" !total
   in
   Lwt.return(
-      if html then Format.sprintf "@[<v><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\" />@,<table>@,%t@,</table>@,@]%!" pp
+      if html
+      then Format.sprintf
+             "@[<v><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\" />@,<table border=1>@,%t@,</table>@,@]%!" pp
       else Format.sprintf "@[<v>%t@]%!" pp
   ) 
