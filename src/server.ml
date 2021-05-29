@@ -94,7 +94,7 @@ class hello = object(self)
        treat "norm_messaging" (fun v -> norm_messaging := bool_of_string v);
        treat "rule_messaging" (fun v -> rule_messaging := bool_of_string v);
        treat "pub_messaging"  (fun v -> pub_messaging := bool_of_string v);
-       treat "no-anonymity"   (fun v -> anonymity := not(bool_of_string v));
+       treat "no_anonymity"   (fun v -> anonymity := not(bool_of_string v));
        treat "novdiplo"       (fun v -> vdiplo := not(bool_of_string v));
        treat "nowebdiplo"     (fun v -> webdiplo := not(bool_of_string v));
        print_endline("Options processed");
