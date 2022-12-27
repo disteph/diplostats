@@ -1,12 +1,14 @@
 (executable
  (name server)
  (libraries containers str yojson lwt cohttp cohttp-lwt cohttp-lwt-unix webmachine diplostats)
+ (promote (until-clean) (into ".."))
  (modules Server)
 )
 
 (executable
  (name main)
  (libraries containers str yojson diplostats)
+ (promote (until-clean) (into ".."))
  (modules Main)
 )
 
