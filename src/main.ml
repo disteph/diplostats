@@ -18,7 +18,11 @@ let options = [
 Arg.parse options (fun a->args := a::!args) description;;
 
 match !args with
-| [variant]        -> parse variant
-| [older; variant] -> parse ~older variant
+| [variant]        ->
+   let body = Lwt_main.run (parse variant) in
+   print_endline ("Received body\n" ^ body)
+| [older; variant] -> 
+   let body = Lwt_main.run (parse ~older variant) in
+   print_endline ("Received body\n" ^ body)
 | [] -> failwith "Too few arguments in the command"
 | _ -> failwith "Too many arguments in the command"

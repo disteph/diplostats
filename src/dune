@@ -12,4 +12,11 @@
  (modules Main)
 )
 
+(executable
+ (name test)
+ (libraries containers str yojson diplostats)
+ (promote (until-clean) (into ".."))
+ (modules Test)
+)
+
 (env (dev (flags (:standard -warn-error -A))))

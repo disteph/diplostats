@@ -69,12 +69,15 @@ let url base variant page =
     | [o] -> o
     | o::tail -> o^"&"^aux2 tail
   in
-  base^(options |> aux1 |> aux2)
+  let url = base^(options |> aux1 |> aux2) in
+  print 0 "@[%s@]@,%!" url;
+  url  
                
 let get base variant page =
   let url = url base variant page in
   let open Lwt in
   Client.get (Uri.of_string url) >>= fun (_resp, body) ->
+  print 0 "@[Got something.@]@,%!";
   (* let code = resp |> Response.status |> Code.code_of_status in
    * Printf.printf "Response code: %d\n" code;
    * Printf.printf "Headers: %s\n" (resp |> Response.headers |> Header.to_string); *)
@@ -182,6 +185,7 @@ let parse ?(html=true) ?older variant =
   let rec collect base page games =
     print 0 "@[Collecting page %i from %a@]@,%!" page pp_base base;
     let* p = get base variant page in
+    print 0 "@[Got the page:@]@,@[<v>%s@]@,%!" p;
     let parsed = Soup.parse p in
     match Soup.(parsed $$ ".gamePanel" |> to_list) with
     | [] -> Lwt.return games
@@ -189,7 +193,9 @@ let parse ?(html=true) ?older variant =
   in
   print 0 "\n%!";
   let* webgames = if !webdiplo then collect WebDiplo 1 [] else Lwt.return [] in
+  print 0 "@[%i games found on webdiplo@]@,%!" (List.length webgames);
   let* vgames   = if !vdiplo   then collect VDiplo 1 [] else Lwt.return [] in
+  print 0 "@[%i games found on vdiplo@]@,%!" (List.length vgames);
   let tbl = HT.create 10 in
   let per_country (i,d,l) member =
     match get_name member with
