@@ -139,6 +139,15 @@ let game_name game =
   let open Soup in
   game $ ".gameName" |> R.leaf_text
 
+let game_duration game =
+  let open Soup in
+  let txt  = game $ ".gameDate" |> R.leaf_text in
+  let year = String.(sub txt (length txt - 4) 4) |> int_of_string in
+  year
+  (* print 0 "@[YEAR: %i@]@,%!" year; *)
+  (* let spring = String.(equal (sub txt 0 6) "Spring") in *)
+  (* 2*(year - 1901 + 1) + if spring then 0 else 1 *)
+
 let compute_stats l =
   let rec aux i rankings victories centers units = function
     | [] -> rankings /. float_of_int i, victories /. float_of_int  i, centers / i, units / i
@@ -205,16 +214,17 @@ let parse ?(html=true) ?older variant =
        i+1, d, (record::l)
     | None -> i, d, l
   in
-  let per_game older ((stop,nb) as sofar) game =
+  let per_game older ((stop,nb,duration_sum) as sofar) game =
     if stop then sofar
     else
-      let name = game_name game in
-      begin
-        print 0 "@[%s@]@,%!" name;
+      try
+        let name = game_name game in
+        let duration = game_duration game in
+        print 0 "@[%s - duration %i@]@,%!" name duration;
         match older with
-        | Some g when String.equal name g -> true, nb
+        | Some g when String.equal name g -> true, nb, duration_sum
         | _ ->
-           if List.mem name bogus_games then (false, nb)
+           if List.mem name bogus_games then sofar
            else
              let _, _, results = Soup.(game $$ ".member" |> to_list) |> List.fold_left per_country (1,1,[]) in
              let results = List.sort (Ord.opp compare_result) results in
@@ -231,11 +241,12 @@ let parse ?(html=true) ?older variant =
                HT.replace tbl result.country (record::base)
              in
              List.iter fill_up results;
-             false, nb+1
-      end
+             false, nb+1, duration_sum+duration
+      with _ -> sofar
   in
-  let sofar = List.fold_left (per_game older) (false,0) webgames in
-  let _, nb_games = List.fold_left (per_game older) sofar vgames in
+  let sofar = List.fold_left (per_game older) (false,0,0) webgames in
+  let _, nb_games, duration = List.fold_left (per_game older) sofar vgames in
+  print 0 "@[Duration moyenne %f@]@,%!" (duration/nb_games);
   let upto = match older with
     | Some g -> "games played before game "^g
     | None -> "games played"
