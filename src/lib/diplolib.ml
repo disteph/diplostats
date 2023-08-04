@@ -224,6 +224,7 @@ let parse ?(html=true) ?older variant =
         match older with
         | Some g when String.equal name g -> true, nb, duration_sum
         | _ ->
+           Option.iter (print 0 "@[not the same as %s@]@,%!") older;
            if List.mem name bogus_games then sofar
            else
              let _, _, results = Soup.(game $$ ".member" |> to_list) |> List.fold_left per_country (1,1,[]) in
