@@ -246,7 +246,7 @@ let parse ?(html=true) ?older variant =
   in
   let sofar = List.fold_left (per_game older) (false,0,0) webgames in
   let _, nb_games, duration = List.fold_left (per_game older) sofar vgames in
-  print 0 "@[Duration moyenne %f@]@,%!" (duration/nb_games);
+  print 0 "@[Duration moyenne %f@]@," (duration/nb_games);
   let upto = match older with
     | Some g -> "games played before game "^g
     | None -> "games played"
@@ -297,6 +297,16 @@ let parse ?(html=true) ?older variant =
           int nb_games
           string upto
           string (url VDiplo variant 1)) fmt;
+    wrap_line (fun fmt ->
+        Format.fprintf fmt "%a %a %a %a %a %a %a %a"
+          string ""
+          string ""
+          string ""
+          string ""
+          string ""
+          string ""
+          string "Fin de partie moyenne"
+          float (duration/nb_games)) fmt;
     print 1 "@[<v>%f@,@]@,%!" !total
   in
   Lwt.return(
