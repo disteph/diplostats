@@ -142,6 +142,21 @@ let game_name game =
   let open Soup in
   game $ ".gameName" |> R.leaf_text
 
+(* Is [variant] one of the values offered by the [<select name="variant">]
+   dropdown on the listing page [parsed]?  Some sites (notably
+   webdiplomacy.net as of 2026-05) silently ignore an unknown variant value
+   and return the unfiltered listing, which would otherwise make [collect]
+   walk through every page of every variant.  We use the dropdown as the
+   site's own source of truth for the set of legal variant names. *)
+let variant_is_listed parsed variant =
+  let open Soup in
+  parsed $$ "select[name=variant] option"
+  |> to_list
+  |> List.exists (fun opt ->
+         match attribute "value" opt with
+         | Some v -> String.equal v variant
+         | None -> false)
+
 let compute_stats l =
   let rec aux i rankings victories centers units = function
     | [] -> rankings /. float_of_int i, victories /. float_of_int  i, centers / i, units / i
@@ -187,9 +202,17 @@ let parse ?(html=true) ?older variant =
     let* p = get base variant page in
     print 0 "@[Got the page:@]@,@[<v>%s@]@,%!" p;
     let parsed = Soup.parse p in
-    match Soup.(parsed $$ ".gamePanel" |> to_list) with
-    | [] -> Lwt.return games
-    | page_games -> collect base (page+1) (List.rev_append page_games games)
+    if page = 1 && not (variant_is_listed parsed variant) then begin
+      print 0
+        "@[Variant %s is not listed on %a; skipping this site (the site \
+         would otherwise return the unfiltered listing)@]@,%!"
+        variant pp_base base;
+      Lwt.return []
+    end
+    else
+      match Soup.(parsed $$ ".gamePanel" |> to_list) with
+      | [] -> Lwt.return games
+      | page_games -> collect base (page+1) (List.rev_append page_games games)
   in
   print 0 "\n%!";
   let* webgames = if !webdiplo then collect WebDiplo 1 [] else Lwt.return [] in

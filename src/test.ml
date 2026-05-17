@@ -1,9 +1,6 @@
 open Containers
 open Lwt
-open Cohttp
 open Cohttp_lwt_unix
-
-open Lwt
 
 let print _i fs = Format.(fprintf stderr) fs
 
