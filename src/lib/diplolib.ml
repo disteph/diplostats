@@ -139,6 +139,21 @@ let game_name game =
   let open Soup in
   game $ ".gameName" |> R.leaf_text
 
+(* Is [variant] one of the values offered by the [<select name="variant">]
+   dropdown on the listing page [parsed]?  Some sites (notably
+   webdiplomacy.net as of 2026-05) silently ignore an unknown variant value
+   and return the unfiltered listing, which would otherwise make [collect]
+   walk through every page of every variant.  We use the dropdown as the
+   site's own source of truth for the set of legal variant names. *)
+let variant_is_listed parsed variant =
+  let open Soup in
+  parsed $$ "select[name=variant] option"
+  |> to_list
+  |> List.exists (fun opt ->
+         match attribute "value" opt with
+         | Some v -> String.equal v variant
+         | None -> false)
+
 let game_duration game =
   let open Soup in
   let txt  = game $ ".gameDate" |> R.leaf_text in
@@ -192,6 +207,14 @@ let parse ?(html=true) ?older variant =
     print 0 "@[Collecting page %i from %a@]@,%!" page pp_base base;
     let* p = get base variant page in
     let parsed = Soup.parse p in
+    if page = 1 && not (variant_is_listed parsed variant) then begin
+      print 0
+        "@[Variant %s is not listed on %a; skipping this site (the site \
+         would otherwise return the unfiltered listing)@]@,%!"
+        variant pp_base base;
+      Lwt.return []
+    end
+    else
     match Soup.(parsed $$ ".gamePanel" |> to_list) with
     | [] -> Lwt.return games
     | page_games -> collect base (page+1) (List.rev_append page_games games)

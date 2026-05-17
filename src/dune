@@ -1,6 +1,6 @@
 (executable
  (name server)
- (libraries containers str yojson lwt cohttp cohttp-lwt cohttp-lwt-unix webmachine diplostats)
+ (libraries containers str yojson lwt cohttp cohttp-lwt cohttp-lwt-unix webmachine sexplib0 diplostats)
  (promote (until-clean) (into ".."))
  (modules Server)
 )

@@ -174,7 +174,7 @@ let main ~port =
   *)
   let conn_closed (ch,_conn) =
     Printf.printf "connection %s closed\n%!"
-      (Sexplib.Sexp.to_string_hum (Conduit_lwt_unix.sexp_of_flow ch))
+      (Sexplib0.Sexp.to_string_hum (Conduit_lwt_unix.sexp_of_flow ch))
   in
   let config = Server.make ~callback ~conn_closed () in
   Printf.eprintf "hello_lwt: listening on localhost:%d\n%!" port;
