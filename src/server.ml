@@ -64,7 +64,11 @@ class hello = object(self)
          let l = String.split_on_char '&' v in
          let aux sofar option = match String.split_on_char '=' option with
            | key::tail ->
-              let value = String.concat "=" tail in
+              let value =
+                String.concat "=" tail
+                |> String.map (function '+' -> ' ' | c -> c)
+                |> Uri.pct_decode
+              in
               if not(String.is_empty value)
               then
                 begin
