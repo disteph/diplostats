@@ -5,11 +5,11 @@ export OCAMLRUNPARAM = b
 default: build
 
 debug:
-	ocamlbuild -use-ocamlfind src/main.native -plugin-option -debug-mode
+	dune build
 
 build:
-	ocamlbuild -use-ocamlfind src/main.native
+	dune build
 
 clean:
-	ocamlbuild -clean
+	dune clean
 	git clean -dfXq
