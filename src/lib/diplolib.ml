@@ -135,6 +135,8 @@ module HT = Hashtbl.Make(String)
 
 let (/) n d = float_of_int n /. float_of_int d
 
+let fetch_timeout = 10.
+
 let game_name game =
   let open Soup in
   game $ ".gameName" |> R.leaf_text
@@ -225,19 +227,25 @@ let parse ?(html=true) ?older variant =
   let (let*) = Lwt.bind in
   let rec collect base page games =
     print 0 "@[Collecting page %i from %a@]@,%!" page pp_base base;
-    let* p = get base variant page in
-    let parsed = Soup.parse p in
-    if page = 1 && not (variant_is_listed parsed variant) then begin
-      print 0
-        "@[Variant %s is not listed on %a; skipping this site (the site \
-         would otherwise return the unfiltered listing)@]@,%!"
-        variant pp_base base;
-      Lwt.return []
-    end
-    else
-    match Soup.(parsed $$ ".gamePanel" |> to_list) with
-    | [] -> Lwt.return games
-    | page_games -> collect base (page+1) (List.rev_append page_games games)
+    Lwt.catch
+      (fun () ->
+        let* p = Lwt_unix.with_timeout fetch_timeout (fun () -> get base variant page) in
+        let parsed = Soup.parse p in
+        if page = 1 && not (variant_is_listed parsed variant) then begin
+          print 0
+            "@[Variant %s is not listed on %a; skipping this site (the site \
+             would otherwise return the unfiltered listing)@]@,%!"
+            variant pp_base base;
+          Lwt.return []
+        end
+        else
+          match Soup.(parsed $$ ".gamePanel" |> to_list) with
+          | [] -> Lwt.return games
+          | page_games -> collect base (page+1) (List.rev_append page_games games))
+      (fun exn ->
+        print 0 "@[Skipping %a page %i after fetch error: %s@]@,%!"
+          pp_base base page (Printexc.to_string exn);
+        Lwt.return games)
   in
   print 0 "\n%!";
   let* webgames = if !webdiplo then collect WebDiplo 1 [] else Lwt.return [] in
