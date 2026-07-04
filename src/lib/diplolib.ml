@@ -154,10 +154,30 @@ let variant_is_listed parsed variant =
          | Some v -> String.equal v variant
          | None -> false)
 
+let trailing_int txt =
+  let is_digit c =
+    let code = Char.code c in
+    code >= Char.code '0' && code <= Char.code '9'
+  in
+  let rec find_last i =
+    if i < 0 then None
+    else if is_digit txt.[i] then Some i
+    else find_last (i - 1)
+  in
+  let rec find_first i =
+    if i < 0 || not (is_digit txt.[i]) then i + 1
+    else find_first (i - 1)
+  in
+  match find_last (String.length txt - 1) with
+  | None -> None
+  | Some last ->
+     let first = find_first last in
+     Some (String.sub txt first (last - first + 1) |> int_of_string)
+
 let game_duration game =
   let open Soup in
   let txt  = game $ ".gameDate" |> R.leaf_text in
-  let year = String.(sub txt (length txt - 4) 4) |> int_of_string in
+  let year = trailing_int txt |> Option.get_exn_or "Could not parse game year" in
   year
   (* print 0 "@[YEAR: %i@]@,%!" year; *)
   (* let spring = String.(equal (sub txt 0 6) "Spring") in *)
@@ -266,11 +286,15 @@ let parse ?(html=true) ?older variant =
              in
              List.iter fill_up results;
              false, nb+1, duration_sum+duration
-      with _ -> sofar
+      with exn ->
+        print 0 "@[Skipping game after parse error: %s@]@,%!"
+          (Printexc.to_string exn);
+        sofar
   in
   let sofar = List.fold_left (per_game older) (false,0,0) webgames in
   let _, nb_games, duration = List.fold_left (per_game older) sofar vgames in
-  print 0 "@[Duration moyenne %f@]@," (duration/nb_games);
+  let average_duration = if nb_games = 0 then 0. else duration/nb_games in
+  print 0 "@[Duration moyenne %f@]@," average_duration;
   let upto = match older with
     | Some g -> "games played before game "^g
     | None -> "games played"
@@ -330,7 +354,7 @@ let parse ?(html=true) ?older variant =
           string ""
           string ""
           string "Fin de partie moyenne"
-          float (duration/nb_games)) fmt;
+          float average_duration) fmt;
     print 1 "@[<v>%f@,@]@,%!" !total
   in
   Lwt.return(
