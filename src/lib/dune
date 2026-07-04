@@ -1,6 +1,6 @@
 (library
  (name diplostats)
- (libraries containers str lwt cohttp cohttp-lwt cohttp-lwt-unix lambdasoup)
+ (libraries containers str lwt cohttp cohttp-lwt cohttp-lwt-unix tls-lwt lambdasoup)
  (preprocess (pps ppx_deriving.std))
  (synopsis "DiploStats library")
 )
